@@ -1,0 +1,7 @@
+index=demo_ai_obs demo_name=ai_observability_conf26 sourcetype=ai:agent_event event_sourcetype=ai:metric
+| eventstats max(demo_run_epoch) as latest_run
+| where demo_run_epoch=latest_run
+| dedup trace_id metric_name
+| stats count as requests sum(cost_usd) as total_cost avg(duration_ms) as avg_latency avg(quality_score) as avg_quality sum(input_tokens) as total_input sum(output_tokens) as total_output by model_provider model_name
+| eval total_cost=round(total_cost,4), avg_latency=round(avg_latency,0), avg_quality=round(avg_quality,2)
+| sort - total_cost

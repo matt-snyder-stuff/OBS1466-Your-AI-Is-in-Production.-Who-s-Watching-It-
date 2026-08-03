@@ -1,0 +1,32 @@
+index=demo_ai_obs sourcetype IN (ai:chat, ai:trace, ai:agent_log, ai:metric)
+| eventstats max(demo_run_epoch) as latest_run
+| where demo_run_epoch=latest_run
+| eval message=mvindex(message,0)
+| eval message_preview=mvindex(message_preview,0)
+| eval span_name=mvindex(span_name,0)
+| eval turn_seq=mvindex(turn_seq,0)
+| eval input_tokens=mvindex(input_tokens,0)
+| eval output_tokens=mvindex(output_tokens,0)
+| eval duration_ms=mvindex(duration_ms,0)
+| eval total_tokens=mvindex(total_tokens,0)
+| eval cost_usd=mvindex(cost_usd,0)
+| eval model_turns=mvindex(model_turns,0)
+| eval tool_calls=mvindex(tool_calls,0)
+| eval detail=case(
+    sourcetype=="ai:chat" AND role=="user",
+      "USER >> " . message,
+    sourcetype=="ai:chat" AND role=="assistant",
+      "AGENT >> " . substr(message_preview,1,120),
+    sourcetype=="ai:trace" AND span_name=="model.turn",
+      "MODEL turn=" . tostring(turn_seq) . " in=" . tostring(input_tokens) . " out=" . tostring(output_tokens) . " " . tostring(round(duration_ms/1000,1)) . "s",
+    sourcetype=="ai:agent_log",
+      "TOOL [" . coalesce(tool_name,"") . "] " . coalesce(tool_output_summary,""),
+    sourcetype=="ai:trace",
+      "TRACE " . span_name . " " . coalesce(tool_output_summary,""),
+    sourcetype=="ai:metric",
+      "METRIC tokens=" . tostring(total_tokens) . " cost=$" . tostring(cost_usd) . " model_turns=" . tostring(model_turns) . " tool_calls=" . tostring(tool_calls)
+  )
+| where isnotnull(detail)
+| dedup trace_id event_sequence
+| table _time trace_id event_sequence detail
+| sort _time event_sequence

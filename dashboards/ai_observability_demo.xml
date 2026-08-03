@@ -1,0 +1,111 @@
+<dashboard version="1.1">
+  <label>AI Agent Observability — Live Demo</label>
+  <description>conf26 talk demo: Your AI Is in Production. Who's Watching It?</description>
+
+  <row>
+    <panel>
+      <title>Latest Agent Run</title>
+      <table>
+        <search>
+          <query>index=demo_ai_obs demo_name=ai_observability_conf26 demo_source=live_agent sourcetype=ai:agent_event
+| eventstats max(demo_run_epoch) as latest_run
+| where demo_run_epoch=latest_run
+| stats count as events values(event_sourcetype) as types values(trace_id) as trace_id min(_time) as first max(_time) as last by demo_run_id user_id
+| eval first=strftime(first,"%H:%M:%S"), last=strftime(last,"%H:%M:%S")
+| eval types=mvjoin(types,", ")
+| table demo_run_id trace_id user_id first last events types</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+  </row>
+
+  <row>
+    <panel>
+      <title>Agent Chat Transcript</title>
+      <table>
+        <search>
+          <query>index=demo_ai_obs demo_name=ai_observability_conf26 sourcetype=ai:agent_event event_sourcetype=ai:chat
+| eventstats max(demo_run_epoch) as latest_run
+| where demo_run_epoch=latest_run
+| eval message_short=substr(message, 1, 200)
+| sort 0 _time
+| table _time role user_id message_short trace_id</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="wrap">true</option>
+      </table>
+    </panel>
+    <panel>
+      <title>Agent Workstream — What Was Actually Happening</title>
+      <table>
+        <search>
+          <query>index=demo_ai_obs demo_name=ai_observability_conf26 sourcetype=ai:agent_event event_sourcetype=ai:trace
+| eventstats max(demo_run_epoch) as latest_run
+| where demo_run_epoch=latest_run
+| where isnotnull(span_name)
+| eval step=case(
+    span_name="user.request",             "1 User request",
+    span_name="model.turn" AND turn_seq=1, "2 Model turn 1",
+    span_name="tool.crm_query",           "3 CRM query",
+    span_name="tool.share_config_check",  "4 Share policy check",
+    span_name="model.turn" AND turn_seq=2, "5 Model turn 2",
+    span_name="tool.file_write",          "6 File created",
+    span_name="model.turn",               "7 Final response",
+    true(),                                span_name
+  )
+| eval detail=coalesce(tool_output_summary, request_summary, decision)
+| eval policy=coalesce(policy_action, "-")
+| dedup trace_id event_sequence
+| sort event_sequence
+| table _time step tool_name file_path file_hash policy detail</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="wrap">true</option>
+      </table>
+    </panel>
+  </row>
+
+  <row>
+    <panel>
+      <title>Model Cost and Performance</title>
+      <table>
+        <search>
+          <query>index=demo_ai_obs demo_name=ai_observability_conf26 sourcetype=ai:agent_event event_sourcetype=ai:metric
+| eventstats max(demo_run_epoch) as latest_run
+| where demo_run_epoch=latest_run
+| dedup trace_id metric_name
+| stats count as requests sum(cost_usd) as total_cost avg(duration_ms) as avg_latency_ms avg(quality_score) as avg_quality sum(input_tokens) as total_input sum(output_tokens) as total_output by model_provider model_name
+| eval total_cost=round(total_cost,4), avg_latency_ms=round(avg_latency_ms,0), avg_quality=round(avg_quality,2)
+| table model_provider model_name requests total_input total_output total_cost avg_latency_ms avg_quality</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+    <panel>
+      <title>Tool Calls by Name</title>
+      <chart>
+        <search>
+          <query>index=demo_ai_obs demo_name=ai_observability_conf26 sourcetype=ai:agent_event event_sourcetype=ai:agent_log
+| eventstats max(demo_run_epoch) as latest_run
+| where demo_run_epoch=latest_run
+| where isnotnull(tool_name)
+| stats count by tool_name policy_action
+| sort - count</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="charting.chart">bar</option>
+        <option name="charting.drilldown">none</option>
+      </chart>
+    </panel>
+  </row>
+</dashboard>

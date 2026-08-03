@@ -1,0 +1,8 @@
+index=demo_ai_obs demo_name=ai_observability_conf26 sourcetype=ai:metric metric_name=prompt_injection
+| eventstats max(demo_run_epoch) as latest_demo_run
+| where demo_run_epoch=latest_demo_run
+| sort 0 - _time
+| dedup keepempty=true trace_id metric_name
+| where prompt_injection_score >= 0.75 OR policy_action="blocked"
+| table _time trace_id user_id workflow prompt_type prompt_injection_score policy_action
+| sort - prompt_injection_score

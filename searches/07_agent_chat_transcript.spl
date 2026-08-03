@@ -1,0 +1,6 @@
+index=demo_ai_obs demo_name=ai_observability_conf26 sourcetype=ai:agent_event event_sourcetype=ai:chat
+| eventstats max(demo_run_epoch) as latest_run
+| where demo_run_epoch=latest_run
+| eval message_short=substr(message, 1, 250)
+| sort 0 _time
+| table _time turn_id role user_id message_short trace_id

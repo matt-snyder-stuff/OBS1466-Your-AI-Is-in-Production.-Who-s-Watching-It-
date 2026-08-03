@@ -1,0 +1,13 @@
+index=demo_ai_obs demo_name=ai_observability_conf26 sourcetype=ai:agent_event
+| eventstats max(demo_run_epoch) as latest_run
+| where demo_run_epoch=latest_run
+| sort 0 event_sequence
+| eval log_line=case(
+    event_sourcetype="ai:chat",      role . ": " . substr(message,1,120),
+    event_sourcetype="ai:agent_log", "TOOL [" . coalesce(tool_name,"agent") . "] " . coalesce(tool_output_summary, decision, file_path),
+    event_sourcetype="ai:trace",     "SPAN " . coalesce(span_name,"") . " " . coalesce(policy_action,""),
+    event_sourcetype="ai:metric",    "METRIC cost=$" . tostring(cost_usd) . " tokens=" . tostring(total_tokens) . " latency=" . tostring(duration_ms) . "ms"
+  )
+| where isnotnull(log_line)
+| dedup trace_id event_sequence
+| table _time event_sourcetype event_sequence trace_id policy_action log_line

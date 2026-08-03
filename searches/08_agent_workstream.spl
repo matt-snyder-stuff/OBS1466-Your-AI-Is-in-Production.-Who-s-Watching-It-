@@ -1,0 +1,20 @@
+index=demo_ai_obs demo_name=ai_observability_conf26 sourcetype=ai:agent_event event_sourcetype=ai:trace
+| eventstats max(demo_run_epoch) as latest_run
+| where demo_run_epoch=latest_run
+| where isnotnull(span_name)
+| eval step=case(
+    span_name="user.request",             "1 User request",
+    span_name="model.turn" AND turn_seq=1, "2 Model turn 1",
+    span_name="tool.crm_query",           "3 CRM query",
+    span_name="tool.share_config_check",  "4 Share policy check",
+    span_name="model.turn" AND turn_seq=2, "5 Model turn 2",
+    span_name="tool.file_write",          "6 File created",
+    span_name="model.turn",               "7 Final response",
+    true(),                                span_name
+  )
+| eval detail=coalesce(tool_output_summary, request_summary, decision)
+| eval file_hash=coalesce(file_hash, "-")
+| eval policy=coalesce(policy_action, "-")
+| dedup trace_id event_sequence
+| sort event_sequence
+| table _time step user_id trace_id tool_name file_path file_hash policy detail

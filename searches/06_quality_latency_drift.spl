@@ -1,0 +1,7 @@
+index=demo_ai_obs demo_name=ai_observability_conf26 sourcetype=ai:trace (schema_valid=false OR quality_score<0.6 OR duration_ms>30000 OR risk_signal=*)
+| eventstats max(demo_run_epoch) as latest_demo_run
+| where demo_run_epoch=latest_demo_run
+| sort 0 - _time
+| dedup keepempty=true trace_id span_name risk_signal output_format expected_format duration_ms
+| eval issue=case(schema_valid=false,"schema failure", quality_score<0.6,"quality drop", duration_ms>30000,"latency spike", risk_signal="format_drift","format drift", risk_signal="retrieval_latency","retrieval latency", true(),risk_signal)
+| table _time trace_id user_id workflow prompt_type model_name span_name issue quality_score schema_valid output_format expected_format duration_ms policy_action
