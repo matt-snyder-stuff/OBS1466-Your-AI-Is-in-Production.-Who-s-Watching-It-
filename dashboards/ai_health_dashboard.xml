@@ -1,0 +1,147 @@
+<dashboard version="1.1" theme="dark">
+  <label>AI Agent Health — conf26 Demo</label>
+  <description>OBS1466: Your AI Is in Production. Who's Watching It? — model cost, latency, quality, and token usage across agent runs.</description>
+
+  <row>
+    <panel>
+      <title>Total Cost — All Runs (USD)</title>
+      <single>
+        <search>
+          <query>index=demo_ai_obs demo_name=ai_observability_conf26 sourcetype=ai:agent_event event_sourcetype=ai:metric cost_usd>0
+| stats sum(cost_usd) as total_cost
+| eval total_cost="$" . tostring(round(total_cost,4))</query>
+          <earliest>-30d@d</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="colorBy">value</option>
+      </single>
+    </panel>
+    <panel>
+      <title>Avg Latency — Latest Run (ms)</title>
+      <single>
+        <search>
+          <query>index=demo_ai_obs demo_name=ai_observability_conf26 sourcetype=ai:agent_event event_sourcetype=ai:metric
+| eventstats max(demo_run_epoch) as latest_run
+| where demo_run_epoch=latest_run
+| stats avg(duration_ms) as avg_latency
+| eval avg_latency=tostring(round(avg_latency,0)) . " ms"</query>
+          <earliest>-30d@d</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="drilldown">none</option>
+      </single>
+    </panel>
+    <panel>
+      <title>Avg Quality Score — Latest Run</title>
+      <single>
+        <search>
+          <query>index=demo_ai_obs demo_name=ai_observability_conf26 sourcetype=ai:agent_event event_sourcetype=ai:metric
+| eventstats max(demo_run_epoch) as latest_run
+| where demo_run_epoch=latest_run
+| stats avg(quality_score) as avg_quality
+| eval avg_quality=tostring(round(avg_quality,2))</query>
+          <earliest>-30d@d</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="rangeColors">["0x65A637","0xF7BC38","0xD93F3C"]</option>
+        <option name="rangeValues">[0.8,0.95]</option>
+        <option name="useColors">true</option>
+      </single>
+    </panel>
+    <panel>
+      <title>Agent Runs Observed</title>
+      <single>
+        <search>
+          <query>index=demo_ai_obs demo_name=ai_observability_conf26 sourcetype=ai:agent_event event_sourcetype=ai:metric
+| dedup demo_run_id
+| stats count as runs</query>
+          <earliest>-30d@d</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="drilldown">none</option>
+      </single>
+    </panel>
+  </row>
+
+  <row>
+    <panel>
+      <title>Cost per Run (USD)</title>
+      <chart>
+        <search>
+          <query>index=demo_ai_obs demo_name=ai_observability_conf26 sourcetype=ai:agent_event event_sourcetype=ai:metric cost_usd>0
+| dedup demo_run_id trace_id
+| stats sum(cost_usd) as run_cost by demo_run_id
+| eval run_cost=round(run_cost,4)
+| sort _time</query>
+          <earliest>-30d@d</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="charting.chart">column</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.axisTitleX.text">Run</option>
+        <option name="charting.axisTitleY.text">Cost (USD)</option>
+        <option name="charting.seriesColors">["0xFF6900"]</option>
+      </chart>
+    </panel>
+    <panel>
+      <title>Latency per Model Turn (ms)</title>
+      <chart>
+        <search>
+          <query>index=demo_ai_obs demo_name=ai_observability_conf26 sourcetype=ai:agent_event event_sourcetype=ai:metric duration_ms>0
+| dedup demo_run_id trace_id
+| sort _time
+| table _time demo_run_id duration_ms</query>
+          <earliest>-30d@d</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="charting.chart">line</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.axisTitleX.text">Time</option>
+        <option name="charting.axisTitleY.text">Latency (ms)</option>
+        <option name="charting.seriesColors">["0x4FC3F7"]</option>
+      </chart>
+    </panel>
+  </row>
+
+  <row>
+    <panel>
+      <title>Token Usage by Run</title>
+      <chart>
+        <search>
+          <query>index=demo_ai_obs demo_name=ai_observability_conf26 sourcetype=ai:agent_event event_sourcetype=ai:metric input_tokens>0
+| dedup demo_run_id trace_id
+| stats sum(input_tokens) as input sum(output_tokens) as output by demo_run_id
+| sort _time</query>
+          <earliest>-30d@d</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="charting.chart">bar</option>
+        <option name="charting.chart.stackMode">stacked</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.axisTitleX.text">Run</option>
+        <option name="charting.axisTitleY.text">Tokens</option>
+        <option name="charting.seriesColors">["0xFF6900","0x4FC3F7"]</option>
+      </chart>
+    </panel>
+    <panel>
+      <title>Model + Cost Summary — All Runs</title>
+      <table>
+        <search>
+          <query>index=demo_ai_obs demo_name=ai_observability_conf26 sourcetype=ai:agent_event event_sourcetype=ai:metric
+| dedup demo_run_id trace_id
+| stats count as turns sum(cost_usd) as total_cost avg(duration_ms) as avg_latency avg(quality_score) as avg_quality sum(input_tokens) as in_tokens sum(output_tokens) as out_tokens by model_name
+| eval total_cost=round(total_cost,4), avg_latency=round(avg_latency,0), avg_quality=round(avg_quality,2)
+| sort -turns
+| rename model_name as Model turns as Turns total_cost as "Cost (USD)" avg_latency as "Avg Latency (ms)" avg_quality as "Avg Quality" in_tokens as "Input Tokens" out_tokens as "Output Tokens"</query>
+          <earliest>-30d@d</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="wrap">true</option>
+      </table>
+    </panel>
+  </row>
+
+</dashboard>
