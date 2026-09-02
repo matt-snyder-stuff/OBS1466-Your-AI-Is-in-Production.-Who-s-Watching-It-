@@ -45,7 +45,7 @@ SPLUNK_INDEX=demo_ai_obs \
 ./seed_splunk.sh
 ```
 
-The script ships 23 events: 3 baseline agent runs for the health dashboard, plus the complete incident story (file created → no share path → EDR block).
+The script ships 27 events: 3 clean baseline agent runs for the health dashboard, 1 degraded baseline run with low quality score and high latency (so search 06 has something to return), and the complete incident story (user chat → CRM query → file created → no share path → browser blocked → EDR event).
 
 **Step 2 — verify**
 
@@ -222,12 +222,54 @@ All searches use `index=demo_ai_obs sourcetype=ai:agent_event`. The `event_sourc
 | `prompt_injection_score` | `ai:metric` | `0.12` | Injection risk score (0–1); threshold alert at ≥ 0.75 |
 | `model_name` | `ai:metric` | `claude-sonnet-4-6` | Model ID |
 | `model_provider` | `ai:metric` | `bedrock` | API provider |
-| `host` | all | `ai-agent-host` | Source host; join key for EDR correlation |
+| `host` | all | `ai-agent-host` | Source host (Splunk envelope field) |
+| `event_host` | `ai:agent_event` | `ai-agent-container` | Host field inside the event payload; mirrors `host`; used by search 10 |
 | `user_id` | all | `demo_user` | Initiating user |
 
 **Adapting field names:** if your agent framework uses different names (e.g. `run_id` instead of `trace_id`, or `latency` instead of `duration_ms`), rename with `eval` before the `stats` step rather than editing every search individually.
 
 **Native sourcetypes:** the searches above use `sourcetype=ai:agent_event event_sourcetype=<type>` because that is how the demo import path (`import_agent_logs_oneshot.sh` using Splunk `collect`) stamps events. If your agent emits events via HEC with their own sourcetypes (`ai:chat`, `ai:trace`, etc.), replace `sourcetype=ai:agent_event event_sourcetype=ai:metric` with `sourcetype=ai:metric` in searches 03–06 and 10–11.
+
+## Implementing in Your Own Stack
+
+Three fields in the searches require deliberate instrumentation decisions in your agent. They do not appear automatically.
+
+### `quality_score`
+
+A float 0–1 emitted as part of your `ai:metric` event. It is application-defined — you decide what "quality" means for your use case. Common approaches:
+
+- **Rubric evaluation:** use a second LLM call to score the response against a checklist (did it answer the question, was it grounded, was the format correct). Score 0–1 by fraction of criteria met.
+- **Downstream validation:** if the output is structured (JSON, SQL, code), parse it and score by whether it validates against the expected schema. Binary pass/fail is fine — `1.0` or `0.0`.
+- **User feedback proxy:** if your agent has a thumbs-up/down, map to 1.0 / 0.0. Partial scores for follow-up questions ("that wasn't right, try again").
+- **Sentinel value:** emit `quality_score=1.0` for now and build the real scorer later. This lets the field exist in your schema so the searches work, and you can backfill logic once you know what quality means in your context.
+
+Search 06 alerts at `quality_score < 0.6`. Tune that threshold once you have a baseline from real traffic.
+
+### `prompt_injection_score`
+
+A float 0–1 emitted alongside the user message processing. Approaches:
+
+- **Heuristic classifier:** score the input against patterns: instruction-override phrases ("ignore previous instructions", "you are now"), role-jailbreak attempts, data exfiltration instructions. Regex or a small fast classifier model works.
+- **LLM-as-classifier:** pass the user message to a cheap fast model with a binary classifier prompt before the main model call. Returns `injection=true/false` + a confidence score.
+- **Sentinel value:** emit `prompt_injection_score=0.0` for all inputs initially. This lets search 05 exist without false positives while you build the real classifier.
+
+Search 05 alerts at `>= 0.75`. The sample data shows score `0.12` (benign baseline) — add a second sample event with score `0.90` to see the alert fire.
+
+### `demo_run_epoch` / run pinning
+
+The `eventstats max(demo_run_epoch)` pattern used by all searches is a demo convenience — it always shows the most recent run's data regardless of time range. In production, replace it with one of:
+
+- **Time range:** remove the `eventstats/where` pair and set the search window to `earliest=-1h`. Let the Splunk time picker control scope.
+- **Run ID filter:** if your agent emits a `run_id` or `session_id`, use `WHERE run_id=most_recent_run_id` from a lookup populated by your deployment pipeline.
+- **Rolling window alert:** for the alert searches (04, 05), `earliest=-15m` with the eventstats removed is simpler and correct — you want all events in the window, not just the latest run.
+
+## Production Scale Notes
+
+**Search 12 join limit:** the `join` subsearch defaults to 50,000 events in Splunk. This is fine for investigation but will silently truncate at volume. For production alerting, replace the join with a `lookup` populated by a scheduled search that materializes EDR events, or use `tstats` with a prebuilt data model.
+
+**Search 04 eventstats at scale:** `eventstats max(demo_run_epoch)` scans every matching event to find the max. At high ingest volume, replace with a time-bounded search (`earliest=-15m`) and remove the run-pinning step entirely for the alert version.
+
+**Separate alert SPL from investigation SPL:** the searches in this repo are designed to be readable and self-contained. For production alerts, strip the `table` and `eval` display steps and keep only the filtering and counting logic. Shorter SPL runs faster.
 
 ## Session Goal
 

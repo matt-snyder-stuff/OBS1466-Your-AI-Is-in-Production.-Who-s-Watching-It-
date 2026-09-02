@@ -1,14 +1,17 @@
+` Production note: the join subsearch is capped at 50,000 events by default (Splunk limit).
+` For high-volume environments, replace the join with a lookup or tstats approach.
+
 index=demo_ai_obs demo_name=ai_observability_conf26 sourcetype=ai:agent_event event_sourcetype=ai:agent_log
 | eventstats max(demo_run_epoch) as latest_run
 | where demo_run_epoch=latest_run
-| stats values(tool_name) as tools values(file_path) as files values(policy_action) as actions values(user_id) as user min(_time) as agent_time by trace_id host
+| stats values(tool_name) as tools values(file_path) as files values(policy_action) as actions values(user_id) as user min(_time) as agent_time by trace_id
 | where mvfind(tools,"file_write")>=0 AND mvfind(actions,"blocked")>=0
 | eval files=mvjoin(files,", "), user=mvjoin(user,", ")
 | eval agent_time_str=strftime(agent_time,"%Y-%m-%d %H:%M:%S")
-| join type=left max=10 host [
+| join type=left max=100 trace_id [
     search index=demo_ai_obs sourcetype=edr:process
     | eval edr_time=_time
-    | fields edr_time host process_name parent_process_name dest dest_ip file_path file_hash signature severity action
+    | fields edr_time trace_id process_name parent_process_name dest dest_ip file_path file_hash signature severity action
   ]
 | eval edr_delta_secs=round(edr_time - agent_time, 0)
 | where isnull(edr_time) OR (edr_delta_secs >= -60 AND edr_delta_secs <= 300)
@@ -17,5 +20,5 @@ index=demo_ai_obs demo_name=ai_observability_conf26 sourcetype=ai:agent_event ev
     "agent_event=" . agent_time_str . " | edr_event=" . strftime(edr_time,"%H:%M:%S") . " (+" . tostring(edr_delta_secs) . "s)",
     "agent_event=" . agent_time_str . " | no edr event correlated"
   )
-| table trace_id user host files agent_time_str process_name dest signature edr_block file_hash timeline
+| table trace_id user files agent_time_str process_name dest signature edr_block file_hash timeline
 | sort agent_time_str

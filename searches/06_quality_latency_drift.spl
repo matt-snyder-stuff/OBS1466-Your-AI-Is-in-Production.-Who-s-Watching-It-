@@ -1,4 +1,4 @@
-index=demo_ai_obs demo_name=ai_observability_conf26 sourcetype=ai:trace (schema_valid=false OR quality_score<0.6 OR duration_ms>30000 OR risk_signal=*)
+index=demo_ai_obs demo_name=ai_observability_conf26 sourcetype=ai:agent_event event_sourcetype=ai:trace (schema_valid=false OR quality_score<0.6 OR duration_ms>30000 OR risk_signal=*)
 | eventstats max(demo_run_epoch) as latest_demo_run
 | where demo_run_epoch=latest_demo_run
 | sort 0 - _time

@@ -1,7 +1,7 @@
 index=demo_ai_obs demo_name=ai_observability_conf26 demo_source=live_agent sourcetype=ai:agent_event
 | eventstats max(demo_run_epoch) as latest_demo_run
 | where demo_run_epoch=latest_demo_run
-| stats count as events values(event_sourcetype) as event_types values(trace_id) as trace_id values(user_id) as user values(event_host) as host min(_time) as first_seen max(_time) as last_seen by demo_run_id
+| stats count as events values(event_sourcetype) as event_types values(trace_id) as trace_id values(user_id) as user values(host) as host min(_time) as first_seen max(_time) as last_seen by demo_run_id
 | eval first_seen=strftime(first_seen,"%Y-%m-%d %H:%M:%S"), last_seen=strftime(last_seen,"%Y-%m-%d %H:%M:%S"), trace_id=mvjoin(trace_id,", "), user=mvjoin(user,", "), host=mvjoin(host,", ")
 | eval event_types=mvjoin(event_types,", ")
 | table demo_run_id first_seen last_seen events event_types trace_id user host
