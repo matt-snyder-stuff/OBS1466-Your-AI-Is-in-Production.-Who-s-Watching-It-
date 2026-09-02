@@ -1,4 +1,4 @@
-index=demo_ai_obs sourcetype=ai:agent_event event_sourcetype=ai:agent_log
+index=demo_ai_obs demo_name=ai_observability_conf26 sourcetype=ai:agent_event event_sourcetype=ai:agent_log
 | eventstats max(demo_run_epoch) as latest_run
 | where demo_run_epoch=latest_run
 | stats values(tool_name) as tools values(file_path) as files values(policy_action) as actions values(user_id) as user min(_time) as agent_time by trace_id host

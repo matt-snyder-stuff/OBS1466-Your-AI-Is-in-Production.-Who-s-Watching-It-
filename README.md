@@ -31,12 +31,80 @@ The searches in this repo are built around that operator view:
 - cost and performance signals
 - searchable evidence for investigation
 
+## Quick Start
+
+You need a Splunk instance with HEC enabled. On a fresh Splunk install, these are the defaults. On Splunk Cloud, create a HEC token in Settings → Data Inputs.
+
+**Step 1 — send sample events**
+
+```bash
+cd examples
+HEC_URL=https://your-splunk:8088/services/collector/event \
+HEC_TOKEN=your-hec-token \
+SPLUNK_INDEX=demo_ai_obs \
+./seed_splunk.sh
+```
+
+The script ships 23 events: 3 baseline agent runs for the health dashboard, plus the complete incident story (file created → no share path → EDR block).
+
+**Step 2 — verify**
+
+Run this in Splunk Search:
+
+```spl
+index=demo_ai_obs trace_id=tr_file_share_001
+| stats count by sourcetype
+```
+
+Expected:
+
+| sourcetype | count |
+|------------|-------|
+| ai:agent_log | 6 |
+| ai:chat | 3 |
+| ai:trace | 5 |
+| edr:process | 1 |
+
+**Step 3 — run the key searches**
+
+Start here, in this order:
+
+1. `07_agent_chat_transcript.spl` — what the user saw
+2. `08_agent_workstream.spl` — what was actually happening
+3. `12_edr_correlation.spl` — endpoint tie-in that completes the story
+4. `02_unapproved_file_share_detection.spl` — detection view
+
+**Step 4 — import the dashboard**
+
+In Splunk: Settings → User Interface → Views → Import Dashboard. Import `dashboards/ai_observability_demo.xml`.
+
+**Step 5 — set up alerts** (optional)
+
+Copy `examples/savedsearches.conf` to `$SPLUNK_HOME/etc/apps/<your_app>/local/`. Tune the thresholds, then set `disabled = 0`.
+
+---
+
+## Adapting to Your Environment
+
+Two things to change first:
+
+```spl
+index=demo_ai_obs            → your AI telemetry index
+demo_name=ai_observability_conf26  → remove or replace with your app/service name filter
+```
+
+Then map your field names using the field reference table below. If your framework uses different names, use `eval` to rename before the `stats` step rather than editing every search.
+
+**Native sourcetypes:** if your agent emits events with their own sourcetypes directly via HEC (e.g. `sourcetype=ai:trace`), replace `sourcetype=ai:agent_event event_sourcetype=ai:trace` with just `sourcetype=ai:trace`. The sample data uses a wrapper sourcetype because that is how the Splunk `collect` import path stamps events.
+
+---
+
 ## Repository Layout
 
 ```text
 dashboards/
-  ai_observability_demo.xml
-  ai_health_dashboard.xml
+  ai_observability_demo.xml    — demo storyline dashboard
+  ai_health_dashboard.xml      — model cost, latency, quality over time
 
 searches/
   01_agent_timeline.spl
@@ -51,6 +119,11 @@ searches/
   10_live_agent_run.spl
   11_live_agent_workstream.spl
   12_edr_correlation.spl
+
+examples/
+  sample_events.jsonl          — 23 representative events (3 baseline runs + full incident story)
+  seed_splunk.sh               — POST sample events to HEC, print verification query
+  savedsearches.conf           — alert definitions for searches 04 and 05
 ```
 
 ## Searches
@@ -152,28 +225,6 @@ All searches use `index=demo_ai_obs sourcetype=ai:agent_event`. The `event_sourc
 **Adapting field names:** if your agent framework uses different names (e.g. `run_id` instead of `trace_id`, or `latency` instead of `duration_ms`), rename with `eval` before the `stats` step rather than editing every search individually.
 
 **Native sourcetypes:** the searches above use `sourcetype=ai:agent_event event_sourcetype=<type>` because that is how the demo import path (`import_agent_logs_oneshot.sh` using Splunk `collect`) stamps events. If your agent emits events via HEC with their own sourcetypes (`ai:chat`, `ai:trace`, etc.), replace `sourcetype=ai:agent_event event_sourcetype=ai:metric` with `sourcetype=ai:metric` in searches 03–06 and 10–11.
-
-## Splunk Adaptation Notes
-
-These searches were built for a local demo index and a conference storyline. In a real deployment, you will usually update:
-
-- index names
-- sourcetypes
-- field names
-- alert thresholds
-- dashboard panel queries
-
-The searches are deliberately kept readable so teams can tune them quickly.
-
-## Recommended First Steps
-
-If you want to adapt this material in your own environment:
-
-1. Start with `02_unapproved_file_share_detection.spl`
-2. Validate that your telemetry includes a usable correlation field such as `trace_id`
-3. Map your application, agent, and endpoint fields into one searchable story
-4. Import the dashboard XML and retarget the panels
-5. Tune thresholds for cost, latency, and injection based on your normal baselines
 
 ## Session Goal
 
