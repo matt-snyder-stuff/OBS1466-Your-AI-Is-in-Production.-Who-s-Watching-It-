@@ -244,10 +244,57 @@ Three fields in the searches require deliberate instrumentation decisions in you
 
 A float 0–1 emitted as part of your `ai:metric` event. It is application-defined. `examples/quality_scorer.py` has three ready-to-use implementations:
 
-- **`score_structured_output(output, schema)`** — parses the response as JSON and checks that required fields are present with the right types. No API call. Best for agents that return structured data.
-- **`score_rubric(response, criteria)`** — checks whether key phrases appear in the response. No API call. Good for conversational agents with predictable output patterns.
-- **`score_llm_judge(response, user_request, criteria)`** — sends the response to a fast model (default: Claude Haiku) and asks it to rate each criterion 1–5. Requires `ANTHROPIC_API_KEY` in the environment. If the key is absent or any error occurs, silently falls back to `score_sentinel()` — safe to include in code without configuring. Swap to OpenAI by replacing the client call (stub in the docstring).
-- **`score_sentinel()`** — always returns 1.0. Use this until you know what quality means in your context. Ensures the field exists in your schema from day one.
+Four scorers are available in `examples/quality_scorer.py`, ordered from lightest to most accurate. Use one — they all return a float in [0.0, 1.0] and are drop-in replacements for each other.
+
+| Scorer | API call? | Best for |
+|--------|-----------|---------|
+| `score_structured_output(output, schema)` | No | Agents that return JSON, CSV headers, SQL |
+| `score_rubric(response, criteria)` | No | Conversational agents with predictable phrasing |
+| `score_llm_judge(response, user_request)` | Yes — optional | Highest accuracy; safe to include unconfigured |
+| `score_sentinel()` | No | Placeholder — always 1.0, use until ready to score |
+
+**Setting up `score_llm_judge` (optional)**
+
+This is the highest-accuracy option. If you skip it, `score_sentinel()` is a safe drop-in that keeps the field in your schema without firing false alerts.
+
+1. Install the Anthropic SDK:
+   ```bash
+   pip install anthropic
+   ```
+
+2. Set your API key:
+   ```bash
+   export ANTHROPIC_API_KEY=sk-ant-...
+   ```
+   For production, inject this via your secrets manager or container env rather than a shell export.
+
+3. Call it before emitting your metric event:
+   ```python
+   from quality_scorer import score_llm_judge
+
+   quality = score_llm_judge(
+       response=agent_final_response,
+       user_request=original_user_message,
+       criteria=[                          # optional — defaults to general quality rubric
+           "directly answered the request",
+           "response is accurate",
+           "no hallucinated data",
+       ],
+       model="claude-haiku-4-5-20251001",  # fast + cheap; change to any Anthropic model
+   )
+   ```
+
+4. Verify it's working:
+   ```bash
+   cd examples
+   ANTHROPIC_API_KEY=sk-ant-... python3 quality_scorer.py
+   # LLM judge quality: <live score, e.g. 0.9>
+   # (If key not set, you'll see: LLM judge quality: 1.0  ← sentinel fallback)
+   ```
+
+**Using OpenAI instead:** the `score_llm_judge` docstring includes a three-line swap for `openai.OpenAI()`. The prompt and scoring logic stay the same.
+
+**Fail-safe behavior:** if `ANTHROPIC_API_KEY` is not set, the package is not installed, or any error occurs (network, rate limit, bad model response), `score_llm_judge` returns `score_sentinel()` silently. It never raises an exception or breaks the agent's hot path. Safe to deploy before you've configured it.
 
 Search 06 alerts at `quality_score < 0.6`. Tune that threshold once you have a baseline from real traffic.
 
