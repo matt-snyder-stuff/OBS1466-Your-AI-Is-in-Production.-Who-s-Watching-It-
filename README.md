@@ -244,9 +244,10 @@ Three fields in the searches require deliberate instrumentation decisions in you
 
 A float 0–1 emitted as part of your `ai:metric` event. It is application-defined. `examples/quality_scorer.py` has three ready-to-use implementations:
 
-- **`score_structured_output(output, schema)`** — parses the response as JSON and checks that required fields are present with the right types. Returns 1.0 on full pass, 0.0 on parse failure, partial score on schema mismatch. Best for agents that return structured data.
+- **`score_structured_output(output, schema)`** — parses the response as JSON and checks that required fields are present with the right types. No API call. Best for agents that return structured data.
 - **`score_rubric(response, criteria)`** — checks whether key phrases appear in the response. No API call. Good for conversational agents with predictable output patterns.
-- **`score_sentinel()`** — always returns 1.0. Use this until you know what quality means in your context. Ensures the field exists in your telemetry schema so the searches work without false alert noise.
+- **`score_llm_judge(response, user_request, criteria)`** — sends the response to a fast model (default: Claude Haiku) and asks it to rate each criterion 1–5. Requires `ANTHROPIC_API_KEY` in the environment. If the key is absent or any error occurs, silently falls back to `score_sentinel()` — safe to include in code without configuring. Swap to OpenAI by replacing the client call (stub in the docstring).
+- **`score_sentinel()`** — always returns 1.0. Use this until you know what quality means in your context. Ensures the field exists in your schema from day one.
 
 Search 06 alerts at `quality_score < 0.6`. Tune that threshold once you have a baseline from real traffic.
 
