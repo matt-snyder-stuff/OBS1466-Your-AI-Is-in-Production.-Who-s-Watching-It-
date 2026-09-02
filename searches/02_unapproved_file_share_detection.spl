@@ -1,9 +1,9 @@
 index=demo_ai_obs demo_name=ai_observability_conf26 sourcetype=ai:agent_event event_sourcetype=ai:agent_log
 | eventstats max(demo_run_epoch) as latest_run
 | where demo_run_epoch=latest_run
-| stats values(tool_name) as tools values(file_path) as files values(tool_output_summary) as summaries values(user_id) as user min(_time) as first_seen by trace_id
+| stats values(tool_name) as tools values(file_path) as files values(policy_action) as actions values(user_id) as user min(_time) as first_seen by trace_id
 | where mvfind(tools,"file_write")>=0
-| eval share_blocked=if(mvfind(summaries,"0 of")>=0,"yes","no")
+| eval share_blocked=if(mvfind(actions,"blocked")>=0,"yes","no")
 | where share_blocked="yes"
 | eval severity="medium", finding="File created with no approved delivery path"
 | eval first_seen=strftime(first_seen,"%Y-%m-%d %H:%M:%S")

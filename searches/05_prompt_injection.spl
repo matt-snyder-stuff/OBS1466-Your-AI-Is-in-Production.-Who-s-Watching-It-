@@ -1,4 +1,10 @@
-index=demo_ai_obs demo_name=ai_observability_conf26 sourcetype=ai:metric metric_name=prompt_injection
+` Alert setup: save as a scheduled search, run every 5 minutes, earliest=-5m.
+` Trigger condition: number of results > 0.
+` Threshold: 0.75 is a reasonable starting point; tune down toward 0.5 if you want
+`   earlier warning or up toward 0.9 if you see false positives on benign user inputs.
+` policy_action=blocked fires regardless of score — always include both conditions.
+
+index=demo_ai_obs demo_name=ai_observability_conf26 sourcetype=ai:agent_event event_sourcetype=ai:metric metric_name=prompt_injection
 | eventstats max(demo_run_epoch) as latest_demo_run
 | where demo_run_epoch=latest_demo_run
 | sort 0 - _time

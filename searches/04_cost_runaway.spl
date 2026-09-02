@@ -1,4 +1,10 @@
-index=demo_ai_obs demo_name=ai_observability_conf26 sourcetype=ai:metric metric_name=ai_cost
+` Alert setup: save as a scheduled search, run every 15 minutes, earliest=-15m.
+` Trigger condition: number of results > 0.
+` Thresholds: $50 and 4 retries are conference-demo values.
+`   Tune to 2–3x your normal per-session baseline before using in production.
+` Action: create ticket or page depending on the `action` field value.
+
+index=demo_ai_obs demo_name=ai_observability_conf26 sourcetype=ai:agent_event event_sourcetype=ai:metric metric_name=ai_cost
 | eventstats max(demo_run_epoch) as latest_demo_run
 | where demo_run_epoch=latest_demo_run
 | sort 0 - _time

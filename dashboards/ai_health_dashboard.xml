@@ -45,7 +45,7 @@
           <latest>now</latest>
         </search>
         <option name="drilldown">none</option>
-        <option name="rangeColors">["0x65A637","0xF7BC38","0xD93F3C"]</option>
+        <option name="rangeColors">["0xD93F3C","0xF7BC38","0x65A637"]</option>
         <option name="rangeValues">[0.8,0.95]</option>
         <option name="useColors">true</option>
       </single>
