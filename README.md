@@ -81,7 +81,11 @@ Start here, in this order:
 
 In Splunk: Settings → User Interface → Views → Import Dashboard. Import `dashboards/ai_observability_demo.xml`.
 
-**Step 5 — set up alerts** (optional)
+**Step 5 — configure field extraction** (recommended)
+
+Copy `examples/props.conf` to `$SPLUNK_HOME/etc/apps/<your_app>/local/`. This makes field names appear in the Splunk field picker immediately and speeds up searches that scan many events.
+
+**Step 6 — set up alerts** (optional)
 
 Copy `examples/savedsearches.conf` to `$SPLUNK_HOME/etc/apps/<your_app>/local/`. Tune the thresholds, then set `disabled = 0`.
 
@@ -124,9 +128,11 @@ searches/
   12_edr_correlation.spl
 
 examples/
-  sample_events.jsonl          — 23 representative events (3 baseline runs + full incident story)
+  sample_events.jsonl          — 27 events: 3 clean baseline runs, 1 degraded run, full incident story
   seed_splunk.sh               — POST sample events to HEC, print verification query
-  savedsearches.conf           — alert definitions for searches 04 and 05
+  props.conf                   — field extraction config (KV_MODE=json, FIELDALIAS stubs)
+  savedsearches.conf           — alert definitions for searches 02, 04, and 05
+  quality_scorer.py            — drop-in quality_score and prompt_injection_score scorers
 ```
 
 ## Searches
@@ -169,7 +175,7 @@ examples/
   Treats prompt injection as observable security telemetry, not just input validation. Save as a scheduled alert running every 5 minutes. Threshold 0.75; includes `policy_action=blocked` regardless of score.
 
 - `06_quality_latency_drift.spl`
-  Surfaces quality, latency, and behavior drift patterns that matter in production.
+  Surfaces quality, latency, and behavior drift patterns. Latency threshold is statistical (2 standard deviations above a 100-event rolling baseline via `streamstats`) rather than hardcoded, so it adapts to your environment without manual tuning.
 
 ## Dashboard
 
@@ -236,24 +242,27 @@ Three fields in the searches require deliberate instrumentation decisions in you
 
 ### `quality_score`
 
-A float 0–1 emitted as part of your `ai:metric` event. It is application-defined — you decide what "quality" means for your use case. Common approaches:
+A float 0–1 emitted as part of your `ai:metric` event. It is application-defined. `examples/quality_scorer.py` has three ready-to-use implementations:
 
-- **Rubric evaluation:** use a second LLM call to score the response against a checklist (did it answer the question, was it grounded, was the format correct). Score 0–1 by fraction of criteria met.
-- **Downstream validation:** if the output is structured (JSON, SQL, code), parse it and score by whether it validates against the expected schema. Binary pass/fail is fine — `1.0` or `0.0`.
-- **User feedback proxy:** if your agent has a thumbs-up/down, map to 1.0 / 0.0. Partial scores for follow-up questions ("that wasn't right, try again").
-- **Sentinel value:** emit `quality_score=1.0` for now and build the real scorer later. This lets the field exist in your schema so the searches work, and you can backfill logic once you know what quality means in your context.
+- **`score_structured_output(output, schema)`** — parses the response as JSON and checks that required fields are present with the right types. Returns 1.0 on full pass, 0.0 on parse failure, partial score on schema mismatch. Best for agents that return structured data.
+- **`score_rubric(response, criteria)`** — checks whether key phrases appear in the response. No API call. Good for conversational agents with predictable output patterns.
+- **`score_sentinel()`** — always returns 1.0. Use this until you know what quality means in your context. Ensures the field exists in your telemetry schema so the searches work without false alert noise.
 
 Search 06 alerts at `quality_score < 0.6`. Tune that threshold once you have a baseline from real traffic.
 
 ### `prompt_injection_score`
 
-A float 0–1 emitted alongside the user message processing. Approaches:
+A float 0–1 emitted alongside the user message. `examples/quality_scorer.py` includes `score_prompt_injection(user_input)`, which checks 15 injection patterns (instruction-override phrases, jailbreak attempts, template/code injection) with no API call required. Returns 0.0 (no match), 0.5 (one match), or 1.0 (two or more matches).
 
-- **Heuristic classifier:** score the input against patterns: instruction-override phrases ("ignore previous instructions", "you are now"), role-jailbreak attempts, data exfiltration instructions. Regex or a small fast classifier model works.
-- **LLM-as-classifier:** pass the user message to a cheap fast model with a binary classifier prompt before the main model call. Returns `injection=true/false` + a confidence score.
-- **Sentinel value:** emit `prompt_injection_score=0.0` for all inputs initially. This lets search 05 exist without false positives while you build the real classifier.
+To use it:
+```python
+from quality_scorer import score_prompt_injection
+score = score_prompt_injection(user_message)   # call before the main model call
+emit_metric(trace_id, metric_name="prompt_injection",
+            prompt_injection_score=score, policy_action="allowed", ...)
+```
 
-Search 05 alerts at `>= 0.75`. The sample data shows score `0.12` (benign baseline) — add a second sample event with score `0.90` to see the alert fire.
+Search 05 alerts at `>= 0.75`. The sample data includes a benign event at score `0.12`.
 
 ### `demo_run_epoch` / run pinning
 

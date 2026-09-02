@@ -1,7 +1,29 @@
-index=demo_ai_obs demo_name=ai_observability_conf26 sourcetype=ai:agent_event event_sourcetype=ai:trace (schema_valid=false OR quality_score<0.6 OR duration_ms>30000 OR risk_signal=*)
+` Drift and anomaly detection across quality, latency, schema, and behavior signals.
+` Latency threshold is STATISTICAL — 2 standard deviations above the rolling 100-event
+` baseline — rather than hardcoded. This adapts to your environment automatically.
+` On first run (< 2 events), falls back to a 30-second hard floor.
+`
+` Production tuning:
+`   - Increase streamstats window (default 100) if you want a longer baseline period.
+`   - Change the 2x multiplier to 1.5 for more sensitivity or 3 for less noise.
+`   - quality_score < 0.6 threshold: tune once you have 1-2 weeks of baseline data.
+`   - Set current=false so the anomalous event does not dilute its own baseline.
+
+index=demo_ai_obs demo_name=ai_observability_conf26 sourcetype=ai:agent_event event_sourcetype=ai:trace span_name=model.turn
+| sort 0 _time
+| streamstats window=100 avg(duration_ms) as p_avg_latency stdev(duration_ms) as p_std_latency current=false
+| eval latency_threshold=if(p_std_latency>0, p_avg_latency + 2*p_std_latency, 30000)
+| eval is_latency_spike=if(duration_ms > latency_threshold, "yes", "no")
+| eval issue=case(
+    schema_valid=false,          "schema failure",
+    quality_score<0.6,           "quality drop (" . tostring(quality_score) . ")",
+    is_latency_spike="yes",      "latency spike (" . tostring(round(duration_ms/1000,1)) . "s vs " . tostring(round(p_avg_latency/1000,1)) . "s avg)",
+    risk_signal="format_drift",  "format drift",
+    risk_signal="retrieval_latency", "retrieval latency",
+    isnotnull(risk_signal) AND len(risk_signal)>0, risk_signal
+  )
+| where isnotnull(issue)
 | eventstats max(demo_run_epoch) as latest_demo_run
 | where demo_run_epoch=latest_demo_run
-| sort 0 - _time
-| dedup keepempty=true trace_id span_name risk_signal output_format expected_format duration_ms
-| eval issue=case(schema_valid=false,"schema failure", quality_score<0.6,"quality drop", duration_ms>30000,"latency spike", risk_signal="format_drift","format drift", risk_signal="retrieval_latency","retrieval latency", true(),risk_signal)
-| table _time trace_id user_id workflow prompt_type model_name span_name issue quality_score schema_valid output_format expected_format duration_ms policy_action
+| table _time trace_id user_id workflow prompt_type model_name span_name issue quality_score schema_valid output_format expected_format duration_ms p_avg_latency latency_threshold policy_action
+| sort - _time
