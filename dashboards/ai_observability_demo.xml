@@ -14,7 +14,7 @@
 | eval first=strftime(first,"%H:%M:%S"), last=strftime(last,"%H:%M:%S")
 | eval types=mvjoin(types,", ")
 | table demo_run_id trace_id user_id first last events types</query>
-          <earliest>-24h@h</earliest>
+          <earliest>-7d@d</earliest>
           <latest>now</latest>
         </search>
         <option name="drilldown">none</option>
@@ -33,7 +33,7 @@
 | eval message_short=substr(message, 1, 200)
 | sort 0 _time
 | table _time role user_id message_short trace_id</query>
-          <earliest>-24h@h</earliest>
+          <earliest>-7d@d</earliest>
           <latest>now</latest>
         </search>
         <option name="drilldown">none</option>
@@ -63,7 +63,7 @@
 | dedup trace_id event_sequence
 | sort event_sequence
 | table _time step tool_name file_path file_hash policy detail</query>
-          <earliest>-24h@h</earliest>
+          <earliest>-7d@d</earliest>
           <latest>now</latest>
         </search>
         <option name="drilldown">none</option>
@@ -84,7 +84,7 @@
 | stats count as requests sum(cost_usd) as total_cost avg(duration_ms) as avg_latency_ms avg(quality_score) as avg_quality sum(input_tokens) as total_input sum(output_tokens) as total_output by model_provider model_name
 | eval total_cost=round(total_cost,4), avg_latency_ms=round(avg_latency_ms,0), avg_quality=round(avg_quality,2)
 | table model_provider model_name requests total_input total_output total_cost avg_latency_ms avg_quality</query>
-          <earliest>-24h@h</earliest>
+          <earliest>-7d@d</earliest>
           <latest>now</latest>
         </search>
         <option name="drilldown">none</option>
@@ -100,7 +100,7 @@
 | where isnotnull(tool_name)
 | stats count by tool_name policy_action
 | sort - count</query>
-          <earliest>-24h@h</earliest>
+          <earliest>-7d@d</earliest>
           <latest>now</latest>
         </search>
         <option name="charting.chart">bar</option>

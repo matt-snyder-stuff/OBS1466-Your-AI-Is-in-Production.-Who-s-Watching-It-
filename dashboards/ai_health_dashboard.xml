@@ -10,7 +10,7 @@
           <query>index=demo_ai_obs demo_name=ai_observability_conf26 sourcetype=ai:agent_event event_sourcetype=ai:metric cost_usd>0
 | stats sum(cost_usd) as total_cost
 | eval total_cost="$" . tostring(round(total_cost,4))</query>
-          <earliest>-30d@d</earliest>
+          <earliest>-7d@d</earliest>
           <latest>now</latest>
         </search>
         <option name="drilldown">none</option>
@@ -26,7 +26,7 @@
 | where demo_run_epoch=latest_run
 | stats avg(duration_ms) as avg_latency
 | eval avg_latency=tostring(round(avg_latency,0)) . " ms"</query>
-          <earliest>-30d@d</earliest>
+          <earliest>-7d@d</earliest>
           <latest>now</latest>
         </search>
         <option name="drilldown">none</option>
@@ -41,7 +41,7 @@
 | where demo_run_epoch=latest_run
 | stats avg(quality_score) as avg_quality
 | eval avg_quality=tostring(round(avg_quality,2))</query>
-          <earliest>-30d@d</earliest>
+          <earliest>-7d@d</earliest>
           <latest>now</latest>
         </search>
         <option name="drilldown">none</option>
@@ -57,7 +57,7 @@
           <query>index=demo_ai_obs demo_name=ai_observability_conf26 sourcetype=ai:agent_event event_sourcetype=ai:metric
 | dedup demo_run_id
 | stats count as runs</query>
-          <earliest>-30d@d</earliest>
+          <earliest>-7d@d</earliest>
           <latest>now</latest>
         </search>
         <option name="drilldown">none</option>
@@ -75,7 +75,7 @@
 | stats sum(cost_usd) as run_cost by demo_run_id
 | eval run_cost=round(run_cost,4)
 | sort _time</query>
-          <earliest>-30d@d</earliest>
+          <earliest>-7d@d</earliest>
           <latest>now</latest>
         </search>
         <option name="charting.chart">column</option>
@@ -93,7 +93,7 @@
 | dedup demo_run_id trace_id
 | sort _time
 | table _time demo_run_id duration_ms</query>
-          <earliest>-30d@d</earliest>
+          <earliest>-7d@d</earliest>
           <latest>now</latest>
         </search>
         <option name="charting.chart">line</option>
@@ -114,7 +114,7 @@
 | dedup demo_run_id trace_id
 | stats sum(input_tokens) as input sum(output_tokens) as output by demo_run_id
 | sort _time</query>
-          <earliest>-30d@d</earliest>
+          <earliest>-7d@d</earliest>
           <latest>now</latest>
         </search>
         <option name="charting.chart">bar</option>
@@ -135,7 +135,7 @@
 | eval total_cost=round(total_cost,4), avg_latency=round(avg_latency,0), avg_quality=round(avg_quality,2)
 | sort -turns
 | rename model_name as Model turns as Turns total_cost as "Cost (USD)" avg_latency as "Avg Latency (ms)" avg_quality as "Avg Quality" in_tokens as "Input Tokens" out_tokens as "Output Tokens"</query>
-          <earliest>-30d@d</earliest>
+          <earliest>-7d@d</earliest>
           <latest>now</latest>
         </search>
         <option name="drilldown">none</option>

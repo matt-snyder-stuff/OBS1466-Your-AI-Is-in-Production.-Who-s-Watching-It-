@@ -53,17 +53,20 @@ Run this in Splunk Search:
 
 ```spl
 index=demo_ai_obs trace_id=tr_file_share_001
-| stats count by sourcetype
+| eval etype=coalesce(event_sourcetype, sourcetype)
+| stats count by etype
 ```
 
-Expected:
+Expected (all events use `sourcetype=ai:agent_event` except the EDR row):
 
-| sourcetype | count |
-|------------|-------|
-| ai:agent_log | 6 |
-| ai:chat | 3 |
-| ai:trace | 5 |
+| etype | count |
+|-------|-------|
+| ai:agent_log | 4 |
+| ai:chat | 2 |
+| ai:metric | 3 |
+| ai:trace | 7 |
 | edr:process | 1 |
+| **total** | **17** |
 
 **Step 3 — run the key searches**
 
@@ -207,7 +210,7 @@ All searches use `index=demo_ai_obs sourcetype=ai:agent_event`. The `event_sourc
 | `tool_output_summary` | `ai:agent_log`, `ai:trace` | `"File written: open_renewal_accounts.csv"` | One-line outcome |
 | `policy_action` | `ai:agent_log`, `ai:trace` | `blocked`, `allowed` | Guardrail or policy decision |
 | `file_path` | `ai:agent_log`, `ai:trace` | `outputs/agent-files/open_renewal_accounts.csv` | Created or accessed file |
-| `file_hash` | `ai:agent_log` | `sha256=7028648e...` | SHA-256 of the created file |
+| `file_hash` | `ai:agent_log`, `ai:trace`, `edr:process` | `sha256=7028648e...` | SHA-256 of the created file; present on all three event types so they can be correlated |
 | `role` | `ai:chat` | `user`, `assistant` | Speaker in the chat transcript |
 | `message` | `ai:chat` | `"Can you create a CSV..."` | Full message text |
 | `message_preview` | `ai:chat` | first 250 chars | Truncated for display |
